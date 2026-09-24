@@ -27,14 +27,21 @@ export function plainText(menu: Menu): string {
 
 const escSlack = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-export function slackText(menu: Menu): string {
-  return [
-    `*${escSlack(titleOf(menu))}* (Abholung 11:30–13:30)`,
-    ...menu.dishes.map((d) =>
+/** Gerichte als Slack-mrkdwn-Liste; auch für den Workflow Builder (Variable "menu"). */
+export function slackDishes(menu: Menu): string {
+  return menu.dishes
+    .map((d) =>
       [`• *${escSlack(d.name)}* – ${d.price}`, d.description && `   _${escSlack(d.description)}_`, dishInfo(d) && `   ${escSlack(dishInfo(d))}`]
         .filter(Boolean)
         .join("\n"),
-    ),
+    )
+    .join("\n");
+}
+
+export function slackText(menu: Menu): string {
+  return [
+    `*${escSlack(titleOf(menu))}* (Abholung 11:30–13:30)`,
+    slackDishes(menu),
     `<${SOURCE_URL}|Zur Webseite / bestellen>`,
   ].join("\n");
 }

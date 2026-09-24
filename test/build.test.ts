@@ -62,6 +62,7 @@ test("Webhook-Payloads", () => {
   const wf = buildPayload(menu, "workflow");
   assert.deepEqual(Object.keys(wf), ["tag", "menu", "link"]);
   assert.ok(Object.values(wf).every((v) => typeof v === "string"), "Workflow Builder braucht flache Strings");
+  assert.match(String(wf.menu), /^• \*Gebratene Ente mit gelbem Curry\* – 10,90€\n   _.+_\n/);
   assert.equal(parseMode(" Workflow "), "workflow");
   assert.deepEqual(parseUrls("https://a, https://b\nhttps://c\n"), ["https://a", "https://b", "https://c"]);
 });

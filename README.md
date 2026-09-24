@@ -35,6 +35,8 @@ Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 s
      - `slack` (Standard) – für Slack **Incoming Webhooks**: `{"text": "..."}`
      - `workflow` – für den Slack **Workflow Builder** (Webhook-Auslöser): flache Text-Variablen
        `tag`, `menu`, `link`. Im Workflow genau diese drei als Typ *Text* anlegen.
+       `menu` enthält die Gerichte als Slack-Formatierung (`• *Name* – Preis`, `_Beschreibung_`),
+       wie beim Modus `slack`.
      - `raw` – komplettes Menü als JSON inkl. Gerichteliste, für eigene Dienste.
 4. Unter *Actions → Mittagstisch aktualisieren → Run workflow* einmal manuell starten
    (Häkchen „force“ setzen, um den Webhook zu testen).
