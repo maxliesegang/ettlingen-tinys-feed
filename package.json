@@ -5,7 +5,7 @@
   "description": "Inoffizieller RSS-Feed für den Mittagstisch von Tiny's House mit konfigurierbaren Webhooks",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "feed": "tsx src/build.ts",
