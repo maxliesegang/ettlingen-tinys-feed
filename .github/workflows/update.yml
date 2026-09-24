@@ -1,0 +1,78 @@
+name: Mittagstisch aktualisieren
+
+on:
+  schedule:
+    # Ziel: einmal täglich 10:30 Uhr deutscher Zeit. GitHub rechnet in UTC, daher zwei
+    # Trigger; der Schritt "Zeitfenster prüfen" lässt nur den zur aktuellen Zeitzone passenden durch.
+    - cron: "30 8 * * 1-5"   # 10:30 MESZ (Sommerzeit, UTC+2)
+    - cron: "30 9 * * 1-5"   # 10:30 MEZ  (Winterzeit, UTC+1)
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Webhook auch ohne Änderung senden"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["src/**", "test/**", "package*.json", "tsconfig.json"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mittagstisch
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck & Tests
+        run: |
+          npm run typecheck
+          npm test
+
+      # Nur der Cron-Trigger, der zur aktuellen deutschen UTC-Abweichung passt, läuft weiter.
+      # Richtet sich nach dem ausgelösten Cron statt nach der Uhrzeit, weil GitHub geplante
+      # Läufe oft verspätet startet.
+      - name: Zeitfenster prüfen
+        id: gate
+        run: |
+          if [ "$EVENT" = "push" ]; then run=false
+          elif [ "$EVENT" != "schedule" ]; then run=true
+          else
+            case "$(TZ=Europe/Berlin date +%z)/$SCHEDULE" in
+              "+0200/30 8 * * 1-5"|"+0100/30 9 * * 1-5") run=true ;;
+              *) run=false; echo "Nicht 10:30 Uhr deutscher Zeit – übersprungen." ;;
+            esac
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+
+      # Bei Code-Pushes nur prüfen, nicht abrufen und nichts senden.
+      - name: Menü abrufen, Feed bauen, Webhooks senden
+        if: steps.gate.outputs.run == 'true'
+        run: npm run feed -- ${{ inputs.force && '--force' || '' }}
+        env:
+          WEBHOOK_URLS: ${{ secrets.WEBHOOK_URLS }}
+          WEBHOOK_PAYLOAD: ${{ vars.WEBHOOK_PAYLOAD || 'slack' }}
+          FEED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/feed.xml
+
+      - name: Feed committen
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          git diff --staged --quiet || (git commit -m "Mittagstisch $(TZ=Europe/Berlin date +%F)" && git push)

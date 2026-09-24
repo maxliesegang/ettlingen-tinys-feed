@@ -1,0 +1,23 @@
+{
+  "name": "ettlingen-tinys-feed",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Inoffizieller RSS-Feed für den Mittagstisch von Tiny's House mit konfigurierbaren Webhooks",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "feed": "tsx src/build.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "htmlparser2": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2"
+  }
+}
