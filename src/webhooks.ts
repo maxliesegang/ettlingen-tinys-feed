@@ -1,10 +1,10 @@
-import { SOURCE_URL, plainText, slackDishes, slackText, titleOf } from "./format";
+import { SOURCE_URL, plainText, slackText, titleOf, workflowDishes } from "./format";
 import type { Menu, PayloadMode } from "./types";
 
 export function buildPayload(menu: Menu, mode: PayloadMode): Record<string, unknown> {
   switch (mode) {
     case "workflow": // Slack Workflow Builder: nur flache Text-Variablen
-      return { tag: titleOf(menu), menu: slackDishes(menu), link: SOURCE_URL };
+      return { tag: titleOf(menu), menu: workflowDishes(menu), link: SOURCE_URL };
     case "raw":
       return { ...menu, title: titleOf(menu), text: plainText(menu), link: SOURCE_URL };
     case "slack": // Slack Incoming Webhook

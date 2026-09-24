@@ -27,7 +27,17 @@ export function plainText(menu: Menu): string {
 
 const escSlack = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** Gerichte als Slack-mrkdwn-Liste; auch für den Workflow Builder (Variable "menu"). */
+/**
+ * Gerichte als Aufzählung ohne Formatierung für den Workflow Builder (Variable "menu").
+ * Slack zeigt mrkdwn und Entities in Workflow-Variablen wörtlich an, daher kein *…* und kein Escaping.
+ */
+export function workflowDishes(menu: Menu): string {
+  return menu.dishes
+    .map((d) => [`• ${d.name} – ${d.price}`, d.description && `   ${d.description}`, dishInfo(d) && `   ${dishInfo(d)}`].filter(Boolean).join("\n"))
+    .join("\n");
+}
+
+/** Gerichte als Slack-mrkdwn-Liste. */
 export function slackDishes(menu: Menu): string {
   return menu.dishes
     .map((d) =>
