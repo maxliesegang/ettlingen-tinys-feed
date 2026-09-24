@@ -2,14 +2,21 @@ name: Mittagstisch aktualisieren
 
 on:
   schedule:
-    # Ziel: einmal täglich 10:30 Uhr deutscher Zeit. GitHub rechnet in UTC, daher zwei
-    # Trigger; der Schritt "Zeitfenster prüfen" lässt nur den zur aktuellen Zeitzone passenden durch.
-    - cron: "30 8 * * 1-5"   # 10:30 MESZ (Sommerzeit, UTC+2)
-    - cron: "30 9 * * 1-5"   # 10:30 MEZ  (Winterzeit, UTC+1)
+    # Ziel: Mo–Fr alle 30 Minuten von 09:30 bis 11:30 Uhr deutscher Zeit (11:30 öffnet das Restaurant).
+    # GitHub rechnet in UTC, daher decken die Trigger Sommer- (UTC+2) und Winterzeit (UTC+1) ab;
+    # slotOf() in src/slot.ts lässt nur die zur aktuellen Zeitzone passenden weiterlaufen.
+    # Je ein Eintrag pro Uhrzeit, damit der Lauf weiß, zu welchem Termin er gehört.
+    - cron: "30 7 * * 1-5"
+    - cron: "0 8 * * 1-5"
+    - cron: "30 8 * * 1-5"
+    - cron: "0 9 * * 1-5"
+    - cron: "30 9 * * 1-5"
+    - cron: "0 10 * * 1-5"
+    - cron: "30 10 * * 1-5"
   workflow_dispatch:
     inputs:
       force:
-        description: "Webhook auch ohne Änderung senden"
+        description: "Senden, auch wenn heute schon gesendet wurde oder das Datum nicht passt"
         type: boolean
         default: false
   push:
@@ -18,19 +25,73 @@ on:
 
 permissions:
   contents: read
-  actions: write    # Workflow regelmäßig reaktivieren (siehe "Zeitplan aktiv halten")
-  pages: write      # GitHub Pages veröffentlichen
-  id-token: write   # von actions/deploy-pages benötigt
-
-concurrency:
-  group: mittagstisch
-  cancel-in-progress: false
 
 jobs:
-  update:
+  # Bei Code-Pushes nur prüfen, nicht abrufen und nichts senden.
+  test:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  # Ordnet den Lauf dem Zeitfenster zu (src/slot.ts, direkt mit Node, ohne npm ci). Läufe außerhalb
+  # enden hier – noch vor der concurrency-Gruppe, damit sie keinen wartenden Lauf verdrängen.
+  slot:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write # Workflow regelmäßig reaktivieren (siehe "Zeitplan aktiv halten")
     outputs:
-      built: ${{ steps.build.outputs.built }}
+      slot: ${{ steps.slot.outputs.slot }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: src/slot.ts
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Zeitfenster prüfen
+        id: slot
+        run: |
+          slot=$(node src/slot.ts)
+          echo "Lauf: $slot"
+          echo "slot=$slot" >> "$GITHUB_OUTPUT"
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+
+      # Ohne Commits pausiert GitHub geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
+      # Das erneute Aktivieren per API setzt diesen Zähler zurück.
+      - name: Zeitplan aktiv halten
+        if: ${{ !cancelled() && github.event_name == 'schedule' }}
+        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  # Abrufen, senden und veröffentlichen in einem Job: Der nächste Lauf startet erst, wenn das neue
+  # today.json online ist, und liest daraus, ob heute schon gesendet wurde.
+  update:
+    needs: slot
+    if: needs.slot.outputs.slot != 'skip'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: mittagstisch
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write # GitHub Pages veröffentlichen
+      id-token: write # von actions/deploy-pages benötigt
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
 
@@ -46,43 +107,26 @@ jobs:
           npm run typecheck
           npm test
 
-      # Nur der Cron-Trigger, der zur aktuellen deutschen UTC-Abweichung passt, läuft weiter.
-      # Richtet sich nach dem ausgelösten Cron statt nach der Uhrzeit, weil GitHub geplante
-      # Läufe oft verspätet startet.
-      - name: Zeitfenster prüfen
-        id: gate
-        run: |
-          if [ "$EVENT" = "push" ]; then run=false
-          elif [ "$EVENT" != "schedule" ]; then run=true
-          else
-            case "$(TZ=Europe/Berlin date +%z)/$SCHEDULE" in
-              "+0200/30 8 * * 1-5"|"+0100/30 9 * * 1-5") run=true ;;
-              *) run=false; echo "Nicht 10:30 Uhr deutscher Zeit – übersprungen." ;;
-            esac
-          fi
-          echo "run=$run" >> "$GITHUB_OUTPUT"
-        env:
-          EVENT: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
-
       # Liefert die Pages-URL (berücksichtigt auch eine eigene Domain).
       - name: Pages konfigurieren
         id: pages
-        if: steps.gate.outputs.run == 'true'
         uses: actions/configure-pages@v6
 
-      # Bei Code-Pushes nur prüfen, nicht abrufen und nichts senden.
+      # Schlägt der Lauf fehl (letzter Versuch ohne Versand), wird public/ trotzdem veröffentlicht,
+      # falls gebaut; der Fehler wird erst im letzten Schritt gemeldet.
       - name: Menü abrufen, Feed bauen, Webhooks senden
         id: build
-        if: steps.gate.outputs.run == 'true'
         run: |
-          npm run feed -- ${{ inputs.force && '--force' || '' }}
-          # Ohne heutiges Menü entsteht kein public/ – dann bleibt die bisherige Seite online.
+          rc=0
+          npm run feed -- ${{ inputs.force && '--force' || '' }} || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # Ohne neues Menü entsteht kein public/ – dann bleibt die bisherige Seite online.
           echo "built=$([ -f public/today.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           WEBHOOK_URLS: ${{ secrets.WEBHOOK_URLS }}
           WEBHOOK_PAYLOAD: ${{ vars.WEBHOOK_PAYLOAD || 'slack' }}
-          FEED_URL: ${{ steps.pages.outputs.base_url }}/feed.xml
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+          SCHEDULE: ${{ github.event.schedule }}
 
       - name: Pages-Artefakt hochladen
         if: steps.build.outputs.built == 'true'
@@ -90,22 +134,11 @@ jobs:
         with:
           path: public
 
-      # Ohne Commits pausiert GitHub geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
-      # Das erneute Aktivieren per API setzt diesen Zähler zurück.
-      - name: Zeitplan aktiv halten
-        if: github.event_name == 'schedule'
-        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-  deploy:
-    needs: update
-    if: needs.update.outputs.built == 'true'
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Auf GitHub Pages veröffentlichen
         id: deployment
+        if: steps.build.outputs.built == 'true'
         uses: actions/deploy-pages@v5
+
+      - name: Fehler melden
+        if: steps.build.outputs.rc != '0'
+        run: exit 1

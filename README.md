@@ -1,99 +1,51 @@
-# Tiny's House – Mittagstisch als RSS-Feed
+# Tiny's House – Lunch Menu Feed
 
-Inoffizieller Feed für den täglichen Mittagstisch von [Tiny's House](https://tinyshouse.de/) in Ettlingen,
-geschrieben in TypeScript. Eine GitHub Action ruft werktags um 10:30 Uhr die Webseite ab, baut daraus `feed.xml` und `today.json`,
-veröffentlicht beides auf GitHub Pages und löst optional Webhooks aus (z. B. Slack).
-Es wird nur das aktuelle Menü vorgehalten, kein Verlauf.
+Unofficial feed for the daily lunch menu of [Tiny's House](https://tinyshouse.de/) in Ettlingen.
+A GitHub Action checks the site Mon–Fri every 30 minutes from 09:30 to 11:30 (Europe/Berlin),
+publishes `feed.xml` and `today.json` to GitHub Pages and optionally posts the menu to Slack.
 
-## Projektstruktur
+## Schedule
 
-```
-src/
-  build.ts      Einstiegspunkt: abrufen → parsen → public/ schreiben → Webhooks
-  parse.ts      HTML → Textzeilen → Menü → Gerichte mit Allergenen/Preis
-  allergens.ts  Legende der Allergen- und Zusatzstoff-Kürzel
-  feed.ts       RSS-2.0-Ausgabe
-  webhooks.ts   Payload-Formate und Versand
-  format.ts     Texte für Slack, RSS, Hash
-  time.ts       Datum/Zeit in Europe/Berlin, RFC 822
-  types.ts      gemeinsame Typen
-test/           Tests (node:test) mit HTML-Fixture
-public/         Build-Ausgabe (nicht im Repo), wird per Action auf GitHub Pages veröffentlicht
-```
+- Only a menu dated today, whose weekday matches the date and whose dishes all have a name and price,
+  is sent. Otherwise the run waits for the next attempt. If the date is new but the dishes are
+  still yesterday's (page half updated), it also waits, and only sends them on the last attempt.
+- At most one message per day: each run first reads the published `today.json`; if it already has
+  today's date, nothing is sent. Corrections after that update the feed but are not sent again.
+- If no webhook gets through, nothing is published, so the next attempt sends again.
+- If nothing was sent by the last attempt (11:30, when the restaurant opens), that run fails and
+  GitHub emails you (this also happens on holidays). A manual run counts as a last attempt; with
+  "force" it sends again and ignores date and weekday.
 
-Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 selbst mit.
+## Setup
 
-## Einrichtung
+1. *Settings → Pages → Source:* **GitHub Actions**.
+2. *Settings → Secrets and variables → Actions:*
+   - Secret `WEBHOOK_URLS`: one or more URLs (comma or newline separated).
+   - Variable `WEBHOOK_PAYLOAD`: `slack` (Incoming Webhook, default), `workflow` (Workflow Builder) or `raw` (full JSON).
+3. *Actions → Mittagstisch aktualisieren → Run workflow* with "force" to test (sends even if already sent today).
 
-1. Repository auf GitHub anlegen, Dateien pushen (inklusive `package-lock.json`).
-2. **Pages aktivieren:** *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
-   Die Action veröffentlicht `public/` bei jedem Lauf (`actions/deploy-pages`). Der Feed liegt danach
-   unter `https://<user>.github.io/<repo>/feed.xml`, das Tagesmenü unter `…/today.json`.
-3. **Webhooks (optional):** *Settings → Secrets and variables → Actions*
-   - Secret `WEBHOOK_URLS`: eine oder mehrere URLs, getrennt durch Komma oder Zeilenumbruch.
-   - Variable `WEBHOOK_PAYLOAD` (Tab *Variables*):
-     - `slack` (Standard) – für Slack **Incoming Webhooks**: `{"text": "..."}`
-     - `workflow` – für den Slack **Workflow Builder** (Webhook-Auslöser): flache Text-Variablen
-       `tag`, `menu`, `link`. Im Workflow genau diese drei als Typ *Text* anlegen.
-       `menu` enthält die Gerichte als Aufzählung ohne Formatierung (`• Name – Preis`, darunter
-       eingerückt Beschreibung und Allergene), da Slack Formatierung in Workflow-Variablen
-       wörtlich anzeigt.
-     - `raw` – komplettes Menü als JSON inkl. Gerichteliste, für eigene Dienste.
-4. Unter *Actions → Mittagstisch aktualisieren → Run workflow* einmal manuell starten
-   (Häkchen „force“ setzen, um den Webhook zu testen).
+## Slack Workflow Builder
 
-## Ablauf
+Add these Text variables to the webhook trigger:
 
-- Läuft einmal Mo–Fr um **10:30 Uhr deutscher Zeit**. Da GitHub-Cron in UTC rechnet, gibt es zwei
-  Trigger (08:30 und 09:30 UTC); ein Prüfschritt lässt nur den zur aktuellen Sommer-/Winterzeit
-  passenden weiterlaufen. GitHub startet geplante Läufe teils mit einigen Minuten Verspätung.
-- Nur wenn die Seite ein Menü **vom heutigen Datum** zeigt, werden Feed und JSON neu veröffentlicht
-  und Webhooks gesendet. Sonst bleibt die bisherige Seite online und es wird nichts gesendet.
-- Ein manueller Lauf sendet den Webhook erneut; mit „force“ wird auch ein Menü mit anderem Datum verwendet.
-- Ein fehlgeschlagener Webhook erzeugt eine Warnung im Log, bricht den Lauf aber nicht ab.
-- Bei Pushes auf den Code laufen nur Typecheck und Tests.
-- `today.json` enthält das aktuelle Menü, `feed.xml` genau einen Eintrag dazu.
-  `https://<user>.github.io/<repo>/today.json` ist damit eine einfache JSON-API.
+| Variable  | Content                                          |
+| --------- | ------------------------------------------------ |
+| `tag`     | "Mittagstisch Donnerstag, 24.09.2026"            |
+| `menu`    | `• Name – Price` per dish                        |
+| `details` | plus description and allergens (for the thread)  |
+| `link`    | https://tinyshouse.de/                           |
 
-## JSON-Format pro Gericht
+Slack shows formatting inside variables literally, so all values are plain text.
+The sender's name and icon are set in the workflow itself.
 
-```json
-{
-  "name": "Gelbes-Curry vegetarisch",
-  "description": "würziges gelbes Curry in cremiger Kokosmilch mit frischem Gemüse und Reis.",
-  "price": "8,90€",
-  "priceEur": 8.9,
-  "allergens": [{ "code": "d", "label": "Eier" }, { "code": "n", "label": "Weichtiere" }],
-  "additives": [{ "code": "4", "label": "mit Geschmacksverstärker(n)" }],
-  "unknownCodes": [],
-  "tags": ["vegetarisch"]
-}
-```
-
-- Die Kürzel wie `(4,d,n)` werden aus Name/Beschreibung entfernt und über die
-  [Legende der Seite](https://tinyshouse.de/zusatzstoffe-und-allergene/) aufgelöst
-  (Ziffern = Zusatzstoffe, Buchstaben = Allergene). Unbekannte Kürzel landen in `unknownCodes`.
-- `tags` enthält nur, was ausdrücklich im Text steht (`vegetarisch`, `vegan`), keine Vermutungen.
-- Der Webhook-Modus `raw` schickt genau diese Struktur mit.
-
-## Lokal
+## Local
 
 ```bash
 npm install
-npm test
-npm run feed -- --no-webhook                       # live abrufen, nur public/ bauen
-npm run feed -- --html test/fixtures/sample.html   # mit gespeichertem HTML testen
-WEBHOOK_URLS=https://hooks.slack.com/... npm run feed   # inkl. Webhook
+npm test && npm run typecheck
+npm run feed -- --no-webhook                      # fetch live, only build public/
+npm run feed -- --html test/fixtures/sample.html  # use saved HTML
 ```
 
-## Hinweise
-
-- Das Parsen basiert auf dem sichtbaren Seitentext (Zeile `WOCHENTAG - TT.MM` bis
-  „Alle Angaben ohne Gewähr“), nicht auf Elementor-CSS-Klassen. Ändert das Restaurant das Layout
-  grundlegend, findet der Lauf nichts und meldet das im Log. Dann `test/fixtures/sample.html` mit dem
-  neuen HTML aktualisieren und `src/parse.ts` anpassen.
-- Ein Abruf pro Werktag belastet die Seite praktisch nicht. Der Feed veröffentlicht allerdings
-  Inhalte des Restaurants. Für eine größere Verbreitung vorher kurz bei Tiny's House nachfragen.
-- GitHub pausiert geplante Workflows in öffentlichen Repos nach 60 Tagen ohne Aktivität. Da die
-  Action nichts committet, reaktiviert sie sich bei jedem Lauf selbst per API. Falls der Zeitplan
-  trotzdem einmal stoppt, genügt unter *Actions* ein Klick auf „Enable workflow“.
+If a run finds nothing, the site layout has probably changed: save the new HTML to
+`test/fixtures/sample.html` and adjust `src/parse.ts`.
