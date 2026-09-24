@@ -17,7 +17,10 @@ on:
     paths: ["src/**", "test/**", "package*.json", "tsconfig.json"]
 
 permissions:
-  contents: write
+  contents: read
+  actions: write    # Workflow regelmäßig reaktivieren (siehe "Zeitplan aktiv halten")
+  pages: write      # GitHub Pages veröffentlichen
+  id-token: write   # von actions/deploy-pages benötigt
 
 concurrency:
   group: mittagstisch
@@ -26,6 +29,8 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.build.outputs.built }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,19 +65,47 @@ jobs:
           EVENT: ${{ github.event_name }}
           SCHEDULE: ${{ github.event.schedule }}
 
+      # Liefert die Pages-URL (berücksichtigt auch eine eigene Domain).
+      - name: Pages konfigurieren
+        id: pages
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/configure-pages@v5
+
       # Bei Code-Pushes nur prüfen, nicht abrufen und nichts senden.
       - name: Menü abrufen, Feed bauen, Webhooks senden
+        id: build
         if: steps.gate.outputs.run == 'true'
-        run: npm run feed -- ${{ inputs.force && '--force' || '' }}
+        run: |
+          npm run feed -- ${{ inputs.force && '--force' || '' }}
+          # Ohne heutiges Menü entsteht kein public/ – dann bleibt die bisherige Seite online.
+          echo "built=$([ -f public/today.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           WEBHOOK_URLS: ${{ secrets.WEBHOOK_URLS }}
           WEBHOOK_PAYLOAD: ${{ vars.WEBHOOK_PAYLOAD || 'slack' }}
-          FEED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/feed.xml
+          FEED_URL: ${{ steps.pages.outputs.base_url }}/feed.xml
 
-      - name: Feed committen
-        if: steps.gate.outputs.run == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
-          git add docs
-          git diff --staged --quiet || (git commit -m "Mittagstisch $(TZ=Europe/Berlin date +%F)" && git push)
+      - name: Pages-Artefakt hochladen
+        if: steps.build.outputs.built == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: public
+
+      # Ohne Commits pausiert GitHub geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
+      # Das erneute Aktivieren per API setzt diesen Zähler zurück.
+      - name: Zeitplan aktiv halten
+        if: github.event_name == 'schedule'
+        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+  deploy:
+    needs: update
+    if: needs.update.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4

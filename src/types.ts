@@ -28,7 +28,8 @@ export interface Menu {
   dishes: Dish[];
 }
 
-export interface StoredMenu extends Menu {
+export interface PublishedMenu extends Menu {
+  /** Ändert sich mit dem Menü; Teil der RSS-guid, damit Korrekturen als neuer Eintrag erscheinen */
   hash: string;
   /** ISO-Zeitstempel mit Offset, z. B. "2026-09-24T10:10:03+02:00" */
   fetchedAt: string;

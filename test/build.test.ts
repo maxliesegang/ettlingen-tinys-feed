@@ -68,7 +68,7 @@ test("Webhook-Payloads", () => {
 
 test("Feed und RFC-822-Datum", () => {
   const menu = parseMenu(htmlToLines(html), today)!;
-  const xml = renderFeed([{ ...menu, hash: menuHash(menu), fetchedAt: "2026-09-24T10:10:03+02:00" }], "https://x.github.io/r/feed.xml");
+  const xml = renderFeed({ ...menu, hash: menuHash(menu), fetchedAt: "2026-09-24T10:10:03+02:00" }, "https://x.github.io/r/feed.xml");
   assert.match(xml, /<pubDate>Thu, 24 Sep 2026 10:10:03 \+0200<\/pubDate>/);
   assert.match(xml, /Savoiardi Bisquit &amp;amp; Espresso/); // HTML-escaped, dann XML-escaped
   assert.match(xml, /Allergene: Milch \/ Laktose · Zusatzstoffe: koffeinhaltig/);

@@ -1,14 +1,15 @@
 # Tiny's House – Mittagstisch als RSS-Feed
 
 Inoffizieller Feed für den täglichen Mittagstisch von [Tiny's House](https://tinyshouse.de/) in Ettlingen,
-geschrieben in TypeScript. Eine GitHub Action ruft werktags um 10:30 Uhr die Webseite ab, baut daraus `docs/feed.xml` und `docs/menu.json`
-und löst bei einem neuen Menü optional Webhooks aus (z. B. Slack).
+geschrieben in TypeScript. Eine GitHub Action ruft werktags um 10:30 Uhr die Webseite ab, baut daraus `feed.xml` und `today.json`,
+veröffentlicht beides auf GitHub Pages und löst optional Webhooks aus (z. B. Slack).
+Es wird nur das aktuelle Menü vorgehalten, kein Verlauf.
 
 ## Projektstruktur
 
 ```
 src/
-  build.ts      Einstiegspunkt: abrufen → parsen → Feed schreiben → Webhooks
+  build.ts      Einstiegspunkt: abrufen → parsen → public/ schreiben → Webhooks
   parse.ts      HTML → Textzeilen → Menü → Gerichte mit Allergenen/Preis
   allergens.ts  Legende der Allergen- und Zusatzstoff-Kürzel
   feed.ts       RSS-2.0-Ausgabe
@@ -17,7 +18,7 @@ src/
   time.ts       Datum/Zeit in Europe/Berlin, RFC 822
   types.ts      gemeinsame Typen
 test/           Tests (node:test) mit HTML-Fixture
-docs/           wird von der Action befüllt und über GitHub Pages ausgeliefert
+public/         Build-Ausgabe (nicht im Repo), wird per Action auf GitHub Pages veröffentlicht
 ```
 
 Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 selbst mit.
@@ -25,8 +26,9 @@ Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 s
 ## Einrichtung
 
 1. Repository auf GitHub anlegen, Dateien pushen (inklusive `package-lock.json`).
-2. **Pages aktivieren:** *Settings → Pages → Source: Deploy from a branch → `main` / `/docs`*.
-   Der Feed liegt danach unter `https://<user>.github.io/<repo>/feed.xml`.
+2. **Pages aktivieren:** *Settings → Pages → Build and deployment → Source: **GitHub Actions***.
+   Die Action veröffentlicht `public/` bei jedem Lauf (`actions/deploy-pages`). Der Feed liegt danach
+   unter `https://<user>.github.io/<repo>/feed.xml`, das Tagesmenü unter `…/today.json`.
 3. **Webhooks (optional):** *Settings → Secrets and variables → Actions*
    - Secret `WEBHOOK_URLS`: eine oder mehrere URLs, getrennt durch Komma oder Zeilenumbruch.
    - Variable `WEBHOOK_PAYLOAD` (Tab *Variables*):
@@ -42,12 +44,13 @@ Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 s
 - Läuft einmal Mo–Fr um **10:30 Uhr deutscher Zeit**. Da GitHub-Cron in UTC rechnet, gibt es zwei
   Trigger (08:30 und 09:30 UTC); ein Prüfschritt lässt nur den zur aktuellen Sommer-/Winterzeit
   passenden weiterlaufen. GitHub startet geplante Läufe teils mit einigen Minuten Verspätung.
-- Webhooks werden nur gesendet, wenn das Menü **vom heutigen Datum** ist und sich **geändert** hat.
-  Wird das Menü tagsüber korrigiert, kommt also eine zweite Nachricht.
+- Nur wenn die Seite ein Menü **vom heutigen Datum** zeigt, werden Feed und JSON neu veröffentlicht
+  und Webhooks gesendet. Sonst bleibt die bisherige Seite online und es wird nichts gesendet.
+- Ein manueller Lauf sendet den Webhook erneut; mit „force“ wird auch ein Menü mit anderem Datum verwendet.
 - Ein fehlgeschlagener Webhook erzeugt eine Warnung im Log, bricht den Lauf aber nicht ab.
 - Bei Pushes auf den Code laufen nur Typecheck und Tests.
-- `docs/today.json` enthält das heutige Menü, `docs/menu.json` die letzten 30 Tage (`items`).
-  Beides ist gleichzeitig eine einfache JSON-API, z. B. `https://<user>.github.io/<repo>/today.json`.
+- `today.json` enthält das aktuelle Menü, `feed.xml` genau einen Eintrag dazu.
+  `https://<user>.github.io/<repo>/today.json` ist damit eine einfache JSON-API.
 
 ## JSON-Format pro Gericht
 
@@ -75,9 +78,9 @@ Laufzeitabhängigkeit ist nur `htmlparser2`; `fetch` bringt Node ab Version 20 s
 ```bash
 npm install
 npm test
-npm run feed -- --no-webhook                       # live abrufen, nur Feed bauen
+npm run feed -- --no-webhook                       # live abrufen, nur public/ bauen
 npm run feed -- --html test/fixtures/sample.html   # mit gespeichertem HTML testen
-WEBHOOK_URLS=https://hooks.slack.com/... npm run feed -- --force
+WEBHOOK_URLS=https://hooks.slack.com/... npm run feed   # inkl. Webhook
 ```
 
 ## Hinweise
@@ -88,6 +91,6 @@ WEBHOOK_URLS=https://hooks.slack.com/... npm run feed -- --force
   neuen HTML aktualisieren und `src/parse.ts` anpassen.
 - Ein Abruf pro Werktag belastet die Seite praktisch nicht. Der Feed veröffentlicht allerdings
   Inhalte des Restaurants. Für eine größere Verbreitung vorher kurz bei Tiny's House nachfragen.
-- GitHub pausiert geplante Workflows in öffentlichen Repos nach 60 Tagen ohne Aktivität.
-  Die Commits der Action halten das Repo normalerweise aktiv; falls nicht, genügt ein
-  manueller Klick auf „Enable workflow“.
+- GitHub pausiert geplante Workflows in öffentlichen Repos nach 60 Tagen ohne Aktivität. Da die
+  Action nichts committet, reaktiviert sie sich bei jedem Lauf selbst per API. Falls der Zeitplan
+  trotzdem einmal stoppt, genügt unter *Actions* ein Klick auf „Enable workflow“.

@@ -1,19 +1,16 @@
 import { SOURCE_URL, escapeXml as x, htmlDescription, titleOf } from "./format";
 import { nowIso, rfc822 } from "./time";
-import type { StoredMenu } from "./types";
+import type { PublishedMenu } from "./types";
 
-export function renderFeed(items: StoredMenu[], feedUrl?: string): string {
-  const entries = items
-    .map(
-      (it) => `    <item>
-      <title>${x(titleOf(it))}</title>
+/** Feed mit genau einem Eintrag: dem aktuellen Menü. */
+export function renderFeed(menu: PublishedMenu, feedUrl?: string): string {
+  const entry = `    <item>
+      <title>${x(titleOf(menu))}</title>
       <link>${SOURCE_URL}</link>
-      <guid isPermaLink="false">tinyshouse-${it.date}-${it.hash}</guid>
-      <pubDate>${rfc822(it.fetchedAt)}</pubDate>
-      <description>${x(htmlDescription(it))}</description>
-    </item>`,
-    )
-    .join("\n");
+      <guid isPermaLink="false">tinyshouse-${menu.date}-${menu.hash}</guid>
+      <pubDate>${rfc822(menu.fetchedAt)}</pubDate>
+      <description>${x(htmlDescription(menu))}</description>
+    </item>`;
 
   const self = feedUrl
     ? `\n    <atom:link href="${x(feedUrl)}" rel="self" type="application/rss+xml" />`
@@ -27,7 +24,7 @@ export function renderFeed(items: StoredMenu[], feedUrl?: string): string {
     <description>Täglicher Mittagstisch von Tiny's House, Ettlingen (inoffiziell)</description>
     <language>de-de</language>
     <lastBuildDate>${rfc822(nowIso())}</lastBuildDate>${self}
-${entries}
+${entry}
   </channel>
 </rss>
 `;
