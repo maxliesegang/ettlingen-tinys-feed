@@ -2,17 +2,19 @@ name: Mittagstisch aktualisieren
 
 on:
   schedule:
-    # Ziel: Mo–Fr alle 30 Minuten von 09:30 bis 11:30 Uhr deutscher Zeit (11:30 öffnet das Restaurant).
+    # Ziel: Mo–Fr alle 30 Minuten von 09:25 bis 11:25 Uhr deutscher Zeit (11:30 öffnet das Restaurant).
+    # Bewusst kurz vor :00 und :30: Zur vollen und halben Stunde startet GitHub geplante Läufe oft
+    # stark verspätet oder gar nicht.
     # GitHub rechnet in UTC, daher decken die Trigger Sommer- (UTC+2) und Winterzeit (UTC+1) ab;
     # slotOf() in src/slot.ts lässt nur die zur aktuellen Zeitzone passenden weiterlaufen.
     # Je ein Eintrag pro Uhrzeit, damit der Lauf weiß, zu welchem Termin er gehört.
-    - cron: "30 7 * * 1-5"
-    - cron: "0 8 * * 1-5"
-    - cron: "30 8 * * 1-5"
-    - cron: "0 9 * * 1-5"
-    - cron: "30 9 * * 1-5"
-    - cron: "0 10 * * 1-5"
-    - cron: "30 10 * * 1-5"
+    - cron: "25 7 * * 1-5"
+    - cron: "55 7 * * 1-5"
+    - cron: "25 8 * * 1-5"
+    - cron: "55 8 * * 1-5"
+    - cron: "25 9 * * 1-5"
+    - cron: "55 9 * * 1-5"
+    - cron: "25 10 * * 1-5"
   workflow_dispatch:
     inputs:
       force:

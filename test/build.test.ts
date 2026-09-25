@@ -83,19 +83,19 @@ test("Feed und RFC-822-Datum", () => {
   assert.equal(rfc822("2026-01-15T09:00:00+01:00"), "Thu, 15 Jan 2026 09:00:00 +0100");
 });
 
-test("Zeitfenster 09:30–11:30 in Sommer- und Winterzeit", () => {
+test("Zeitfenster 09:25–11:25 in Sommer- und Winterzeit", () => {
   // Crons direkt aus dem Workflow, damit Test und Zeitplan nicht auseinanderlaufen.
   const yml = readFileSync(new URL("../.github/workflows/update.yml", import.meta.url), "utf8");
   const crons = [...yml.matchAll(/- cron: "([^"]+)"/g)].map((m) => m[1]!);
   const slots = (now: string) => crons.map((c) => slotOf(c, new Date(now)));
   const count = (list: string[]) => ({ retry: list.filter((s) => s === "retry").length, last: list.filter((s) => s === "last").length });
-  // Beide Zeitzonen: vier Versuche (09:30–11:00) und genau ein letzter um 11:30.
+  // Beide Zeitzonen: vier Versuche (09:25–10:55) und genau ein letzter um 11:25.
   assert.deepEqual(count(slots("2026-09-24T12:00:00Z")), { retry: 4, last: 1 });
   assert.deepEqual(count(slots("2026-01-15T12:00:00Z")), { retry: 4, last: 1 });
-  assert.equal(slotOf("30 9 * * 1-5", new Date("2026-09-24T12:00:00Z")), "last"); // 11:30 MESZ
-  assert.equal(slotOf("30 10 * * 1-5", new Date("2026-01-15T12:00:00Z")), "last"); // 11:30 MEZ
-  assert.equal(slotOf("0 10 * * 1-5", new Date("2026-09-24T12:00:00Z")), "skip"); // 12:00 MESZ
-  assert.equal(slotOf("30 7 * * 1-5", new Date("2026-01-15T12:00:00Z")), "skip"); // 08:30 MEZ
+  assert.equal(slotOf("25 9 * * 1-5", new Date("2026-09-24T12:00:00Z")), "last"); // 11:25 MESZ
+  assert.equal(slotOf("25 10 * * 1-5", new Date("2026-01-15T12:00:00Z")), "last"); // 11:25 MEZ
+  assert.equal(slotOf("55 9 * * 1-5", new Date("2026-09-24T12:00:00Z")), "skip"); // 11:55 MESZ
+  assert.equal(slotOf("25 7 * * 1-5", new Date("2026-01-15T12:00:00Z")), "skip"); // 08:25 MEZ
   assert.equal(slotOf(undefined), "last"); // manuell oder lokal
   assert.throws(() => slotOf("*/30 7-10 * * 1-5"), /fester Minute und Stunde/);
 });

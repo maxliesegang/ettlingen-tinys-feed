@@ -3,8 +3,11 @@
  * `npm ci` direkt mit Node aus (`node src/slot.ts`), um unnötige Läufe früh zu beenden.
  */
 
-/** Berliner Zeit, zu der alle 30 Minuten geprüft wird. Um 11:30 öffnet das Restaurant. */
-export const WINDOW = { first: "09:30", last: "11:30" };
+/**
+ * Berliner Zeit, zu der alle 30 Minuten geprüft wird: kurz vor :00 und :30, weil GitHub
+ * Läufe zur vollen und halben Stunde oft verspätet oder gar nicht startet. Um 11:30 öffnet das Restaurant.
+ */
+export const WINDOW = { first: "09:25", last: "11:25" };
 
 export type Slot = "skip" | "retry" | "last";
 
@@ -26,7 +29,7 @@ const berlinTime = new Intl.DateTimeFormat("de-DE", {
 export function slotOf(schedule: string | undefined, now: Date = new Date()): Slot {
   if (!schedule) return "last";
   const m = /^(\d{1,2})\s+(\d{1,2})\s/.exec(schedule.trim());
-  if (!m) throw new Error(`Cron "${schedule}" muss mit fester Minute und Stunde beginnen, z. B. "30 7 * * 1-5".`);
+  if (!m) throw new Error(`Cron "${schedule}" muss mit fester Minute und Stunde beginnen, z. B. "25 7 * * 1-5".`);
   const utc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Number(m[2]), Number(m[1]));
   const slot = berlinTime.format(utc);
   if (slot < WINDOW.first || slot > WINDOW.last) return "skip";

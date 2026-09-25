@@ -1,7 +1,7 @@
 # Tiny's House – Lunch Menu Feed
 
 Unofficial feed for the daily lunch menu of [Tiny's House](https://tinyshouse.de/) in Ettlingen.
-A GitHub Action checks the site Mon–Fri every 30 minutes from 09:30 to 11:30 (Europe/Berlin),
+A GitHub Action checks the site Mon–Fri every 30 minutes from 09:25 to 11:25 (Europe/Berlin),
 publishes `feed.xml` and `today.json` to GitHub Pages and optionally posts the menu to Slack.
 
 ## Schedule
@@ -12,9 +12,9 @@ publishes `feed.xml` and `today.json` to GitHub Pages and optionally posts the m
 - At most one message per day: each run first reads the published `today.json`; if it already has
   today's date, nothing is sent. Corrections after that update the feed but are not sent again.
 - If no webhook gets through, nothing is published, so the next attempt sends again.
-- If nothing was sent by the last attempt (11:30, when the restaurant opens), that run fails and
-  GitHub emails you (this also happens on holidays). A manual run counts as a last attempt; with
-  "force" it sends again and ignores date and weekday.
+- If nothing was sent by the last attempt (11:25, just before the restaurant opens at 11:30),
+  that run fails and GitHub emails you (this also happens on holidays). A manual run counts
+  as a last attempt; with "force" it sends again and ignores date and weekday.
 
 ## Setup
 
