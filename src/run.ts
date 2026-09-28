@@ -32,7 +32,7 @@ export async function run(slot: Slot, io: Io, { force = false, now = new Date() 
   const last = slot === "last";
   const fail = (reason: string, prefix = NOT_SENT): boolean => {
     if (last) io.log(`::error::${prefix} ${reason}`);
-    else io.log(`${reason} Nächster Versuch in 30 Minuten.`);
+    else io.log(`${reason} Nächster Versuch in 45 Minuten.`);
     return !last;
   };
 
