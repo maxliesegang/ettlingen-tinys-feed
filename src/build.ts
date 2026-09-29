@@ -9,7 +9,7 @@
  *   npm run feed -- --force               senden, auch wenn schon gesendet oder das Datum nicht passt
  *
  * Umgebungsvariablen: WEBHOOK_URLS, WEBHOOK_PAYLOAD (slack | workflow | raw),
- * SITE_URL (Pages-Adresse), SCHEDULE (ausgelöster Cron, siehe src/slot.ts)
+ * SITE_URL (Pages-Adresse), SLOT (skip | retry | last aus src/slot.ts; ohne: last)
  *
  * Ablauf und Regeln stehen in src/run.ts und src/check.ts; hier nur Netzwerk und Dateien.
  */
@@ -21,7 +21,7 @@ import { parseArgs } from "node:util";
 import { renderFeed } from "./feed";
 import { SOURCE_URL, menuHash, titleOf } from "./format";
 import { run } from "./run";
-import { slotOf } from "./slot";
+import type { Slot } from "./slot";
 import { nowIso } from "./time";
 import type { Menu, PublishedMenu } from "./types";
 import { parseMode, parseUrls, sendWebhooks } from "./webhooks";
@@ -61,6 +61,12 @@ async function writeOutput(menu: Menu): Promise<void> {
   console.log(`${titleOf(menu)}: ${menu.dishes.length} Gerichte, public/ gebaut.`);
 }
 
+function parseSlot(value: string | undefined): Slot {
+  if (!value) return "last";
+  if (value === "skip" || value === "retry" || value === "last") return value;
+  throw new Error(`SLOT "${value}" unbekannt, erlaubt: skip, retry, last.`);
+}
+
 async function main(): Promise<void> {
   const { values: args } = parseArgs({
     options: {
@@ -74,7 +80,7 @@ async function main(): Promise<void> {
   await rm(OUT, { recursive: true, force: true });
 
   const ok = await run(
-    slotOf(process.env.SCHEDULE),
+    parseSlot(process.env.SLOT),
     {
       published: fetchPublished,
       html: () => (args.html ? readFile(args.html, "utf8") : fetchHtml()),
@@ -84,7 +90,8 @@ async function main(): Promise<void> {
       write: writeOutput,
       log: console.log,
     },
-    { force: args.force },
+    // Live-Seite bis zu dreimal abrufen (siehe fetchMenu in src/run.ts), lokale Datei einmal.
+    { force: args.force, fetchAttempts: args.html ? 1 : 3 },
   );
   if (!ok) process.exitCode = 1;
 }

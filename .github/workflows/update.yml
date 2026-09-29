@@ -1,27 +1,17 @@
 name: Mittagstisch aktualisieren
 
 on:
-  schedule:
-    # Ziel: Mo–Fr um 08:52, 09:37, 10:22 und 11:07 Uhr deutscher Zeit (11:30 öffnet das Restaurant).
-    # Bewusst abseits von :00 und :30: Zur vollen und halben Stunde startet GitHub geplante Läufe oft
-    # stark verspätet oder gar nicht.
-    # GitHub rechnet in UTC, daher decken die Trigger Sommer- (UTC+2) und Winterzeit (UTC+1) ab;
-    # slotOf() in src/slot.ts lässt nur die zur aktuellen Zeitzone passenden weiterlaufen.
-    # Je ein Eintrag pro Uhrzeit, damit der Lauf weiß, zu welchem Termin er gehört.
-    # Sommerzeit (UTC+2)
-    - cron: "52 6 * * 1-5"
-    - cron: "37 7 * * 1-5"
-    - cron: "22 8 * * 1-5"
-    - cron: "7 9 * * 1-5"
-    # Winterzeit (UTC+1)
-    - cron: "52 7 * * 1-5"
-    - cron: "37 8 * * 1-5"
-    - cron: "22 9 * * 1-5"
-    - cron: "7 10 * * 1-5"
+  # Geplante Läufe kommen von einem externen Cron-Dienst (Mo–Fr alle 30 Minuten, 09:00–11:00
+  # Berliner Zeit, siehe README) per workflow_dispatch mit "scheduled". GitHubs eigener Zeitplan
+  # startet teils Stunden zu spät; src/slot.ts ordnet Läufe nach ihrer Startzeit zu.
   workflow_dispatch:
     inputs:
       force:
         description: "Senden, auch wenn heute schon gesendet wurde oder das Datum nicht passt"
+        type: boolean
+        default: false
+      scheduled:
+        description: "Geplanter Lauf (setzt der externe Cron-Dienst) – für manuelle Läufe leer lassen"
         type: boolean
         default: false
   push:
@@ -51,9 +41,6 @@ jobs:
   slot:
     if: github.event_name != 'push'
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write # Workflow regelmäßig reaktivieren (siehe "Zeitplan aktiv halten")
     outputs:
       slot: ${{ steps.slot.outputs.slot }}
     steps:
@@ -71,15 +58,7 @@ jobs:
           echo "Lauf: $slot"
           echo "slot=$slot" >> "$GITHUB_OUTPUT"
         env:
-          SCHEDULE: ${{ github.event.schedule }}
-
-      # Ohne Commits pausiert GitHub geplante Workflows nach 60 Tagen ohne Repo-Aktivität.
-      # Das erneute Aktivieren per API setzt diesen Zähler zurück.
-      - name: Zeitplan aktiv halten
-        if: ${{ !cancelled() && github.event_name == 'schedule' }}
-        run: gh api --method PUT "repos/${{ github.repository }}/actions/workflows/update.yml/enable"
-        env:
-          GH_TOKEN: ${{ github.token }}
+          SCHEDULED: ${{ inputs.scheduled }}
 
   # Abrufen, senden und veröffentlichen in einem Job: Der nächste Lauf startet erst, wenn das neue
   # today.json online ist, und liest daraus, ob heute schon gesendet wurde.
@@ -131,7 +110,8 @@ jobs:
           WEBHOOK_URLS: ${{ secrets.WEBHOOK_URLS }}
           WEBHOOK_PAYLOAD: ${{ vars.WEBHOOK_PAYLOAD || 'slack' }}
           SITE_URL: ${{ steps.pages.outputs.base_url }}
-          SCHEDULE: ${{ github.event.schedule }}
+          # Zuordnung aus dem slot-Job, nicht neu berechnet: Der Lauf könnte inzwischen über END sein.
+          SLOT: ${{ needs.slot.outputs.slot }}
 
       - name: Pages-Artefakt hochladen
         if: steps.build.outputs.built == 'true'

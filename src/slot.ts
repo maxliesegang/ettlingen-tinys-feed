@@ -1,14 +1,21 @@
 /**
- * Zeitfenster der geplanten Läufe. Bewusst ohne Imports: Die Action führt die Datei vor
- * `npm ci` direkt mit Node aus (`node src/slot.ts`), um unnötige Läufe früh zu beenden.
+ * Zeitfenster der Läufe. Bewusst ohne Imports: Die Action führt die Datei vor `npm ci` direkt mit
+ * Node aus (`node src/slot.ts`), um unnötige Läufe früh zu beenden.
+ *
+ * Ausgelöst wird von einem externen Cron-Dienst (Mo–Fr alle 30 Minuten, 09:00–11:00 Berliner Zeit)
+ * per workflow_dispatch mit `scheduled`, weil GitHub eigene geplante Läufe teils Stunden zu spät
+ * startet. Die Rolle eines Laufs ergibt sich daher aus seiner Startzeit.
  */
 
-/**
- * Berliner Uhrzeiten der Versuche, alle 45 Minuten ab 08:52: abseits von :00 und :30, weil GitHub
- * Läufe zur vollen und halben Stunde oft verspätet oder gar nicht startet. Der letzte Versuch lässt
- * Puffer bis 11:30, dann öffnet das Restaurant.
- */
-export const SLOTS = ["08:52", "09:37", "10:22", "11:07"];
+/** Erster Versuch. */
+export const FIRST = "09:00";
+/** Ab hier letzter Versuch: Ohne gesendetes Menü schlägt der Lauf fehl. */
+export const LAST = "11:00";
+/** Ab hier öffnet das Restaurant; spätere Läufe enden ohne Senden und ohne Fehler. */
+export const END = "11:30";
+
+/** So viel früher darf ein Lauf starten, ohne dem vorigen Zeitfenster zugeordnet zu werden. */
+const EARLY_MINUTES = 5;
 
 export type Slot = "skip" | "retry" | "last";
 
@@ -19,23 +26,20 @@ const berlinTime = new Intl.DateTimeFormat("de-DE", {
   hourCycle: "h23",
 });
 
+const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3));
+
 /**
- * Ordnet einen geplanten Lauf dem Zeitfenster zu. Maßgeblich ist der ausgelöste Cron (UTC),
- * nicht die Startzeit, weil GitHub geplante Läufe oft verspätet startet.
- *   skip  – Cron gehört zur anderen Sommer-/Winterzeit, ergibt also keine der Uhrzeiten in SLOTS
+ * Ordnet einen Lauf dem Zeitfenster zu.
+ *   skip  – vor FIRST oder ab END gestartet
  *   retry – später folgt noch ein Versuch
- *   last  – letzter Versuch des Tages; ohne gesendetes Menü schlägt der Lauf fehl
- * Ohne Cron (manueller oder lokaler Lauf) gilt jeder Lauf als letzter Versuch.
+ *   last  – letzter Versuch des Tages; nur einer, damit GitHub höchstens einmal pro Tag benachrichtigt
+ * Nicht geplante Läufe (manuell oder lokal) gelten immer als letzter Versuch.
  */
-export function slotOf(schedule: string | undefined, now: Date = new Date()): Slot {
-  if (!schedule) return "last";
-  const m = /^(\d{1,2})\s+(\d{1,2})\s/.exec(schedule.trim());
-  if (!m) throw new Error(`Cron "${schedule}" muss mit fester Minute und Stunde beginnen, z. B. "52 6 * * 1-5".`);
-  const utc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), Number(m[2]), Number(m[1]));
-  const slot = berlinTime.format(utc);
-  // Feste Liste statt Bereich: Bei 45 Minuten Abstand fallen Crons der anderen Zeitzone sonst ins Fenster.
-  if (!SLOTS.includes(slot)) return "skip";
-  return slot === SLOTS.at(-1) ? "last" : "retry";
+export function slotOf(scheduled: boolean, now: Date = new Date()): Slot {
+  if (!scheduled) return "last";
+  const started = minutes(berlinTime.format(now));
+  if (started < minutes(FIRST) - EARLY_MINUTES || started >= minutes(END)) return "skip";
+  return started >= minutes(LAST) - EARLY_MINUTES ? "last" : "retry";
 }
 
-if (import.meta.main) console.log(slotOf(process.env.SCHEDULE));
+if (import.meta.main) console.log(slotOf(process.env.SCHEDULED === "true"));

@@ -83,22 +83,21 @@ test("Feed und RFC-822-Datum", () => {
   assert.equal(rfc822("2026-01-15T09:00:00+01:00"), "Thu, 15 Jan 2026 09:00:00 +0100");
 });
 
-test("Zeitplan 08:52–11:07 in Sommer- und Winterzeit", () => {
-  // Crons direkt aus dem Workflow, damit Test und Zeitplan nicht auseinanderlaufen.
-  const yml = readFileSync(new URL("../.github/workflows/update.yml", import.meta.url), "utf8");
-  const crons = [...yml.matchAll(/- cron: "([^"]+)"/g)].map((m) => m[1]!);
-  const slots = (now: string) => crons.map((c) => slotOf(c, new Date(now)));
-  const count = (list: string[]) => ({ retry: list.filter((s) => s === "retry").length, last: list.filter((s) => s === "last").length });
-  // Beide Zeitzonen: drei Versuche (08:52–10:22) und genau ein letzter um 11:07.
-  assert.deepEqual(count(slots("2026-09-24T12:00:00Z")), { retry: 3, last: 1 });
-  assert.deepEqual(count(slots("2026-01-15T12:00:00Z")), { retry: 3, last: 1 });
-  assert.equal(slotOf("7 9 * * 1-5", new Date("2026-09-24T12:00:00Z")), "last"); // 11:07 MESZ
-  assert.equal(slotOf("7 10 * * 1-5", new Date("2026-01-15T12:00:00Z")), "last"); // 11:07 MEZ
-  // Crons der anderen Zeitzone, die zwischen den Versuchen liegen, werden übersprungen.
-  assert.equal(slotOf("52 7 * * 1-5", new Date("2026-09-24T12:00:00Z")), "skip"); // 09:52 MESZ
-  assert.equal(slotOf("22 8 * * 1-5", new Date("2026-01-15T12:00:00Z")), "skip"); // 09:22 MEZ
-  assert.equal(slotOf(undefined), "last"); // manuell oder lokal
-  assert.throws(() => slotOf("*/30 7-10 * * 1-5"), /fester Minute und Stunde/);
+test("Zeitplan: Zuordnung nach Startzeit, 09:00–11:00 in Sommer- und Winterzeit", () => {
+  const at = (iso: string) => slotOf(true, new Date(iso));
+  assert.equal(at("2026-09-28T07:00:05Z"), "retry"); // 09:00 MESZ
+  assert.equal(at("2026-09-28T08:30:05Z"), "retry"); // 10:30 MESZ
+  assert.equal(at("2026-09-28T09:00:05Z"), "last"); // 11:00 MESZ
+  assert.equal(at("2026-01-15T10:00:05Z"), "last"); // 11:00 MEZ
+  assert.equal(at("2026-01-15T08:00:05Z"), "retry"); // 09:00 MEZ
+  // Wenige Minuten zu früh zählt schon zum nächsten Zeitfenster.
+  assert.equal(at("2026-09-28T06:57:00Z"), "retry"); // 08:57
+  assert.equal(at("2026-09-28T08:57:00Z"), "last"); // 10:57
+  // Zu früh oder ab 11:30 (auch der 11:30-Lauf des Cron-Dienstes): kein Senden, kein Fehler.
+  assert.equal(at("2026-09-28T06:50:00Z"), "skip"); // 08:50
+  assert.equal(at("2026-09-28T09:30:00Z"), "skip"); // 11:30
+  assert.equal(at("2026-09-28T16:03:00Z"), "skip"); // 18:03
+  assert.equal(slotOf(false, new Date("2026-09-28T16:03:00Z")), "last"); // manuell oder lokal
 });
 
 test("Menü-Prüfung: Datum, Wochentag, Plausibilität", () => {
@@ -202,4 +201,23 @@ test("Lauf: Korrektur nach dem Senden nur veröffentlichen", async () => {
   const { io, calls } = fakeIo({ published: async () => published(withPrice(menu, 12)) });
   assert.equal(await run("retry", io, { now }), true);
   assert.deepEqual([calls.sent, calls.written], [0, 1]);
+});
+
+test("Lauf: Seite kurz ohne Mittagstisch oder nicht erreichbar – erneut abrufen", async () => {
+  const responses = [
+    async () => "<h1>Wartung</h1><p>Gleich wieder da</p>",
+    async () => Promise.reject(new Error("fetch failed")),
+    async () => html,
+  ];
+  let fetched = 0;
+  const { io, calls } = fakeIo({ html: () => responses[fetched++]!() });
+  assert.equal(await run("last", io, { now, fetchAttempts: 3, fetchDelayMs: 0 }), true);
+  assert.equal(fetched, 3);
+  assert.equal(calls.sent, 1);
+  assert.match(calls.logs.join("\n"), /beginnt mit: "Wartung \| Gleich wieder da"/);
+
+  // Bleibt die Seite leer, schlägt der letzte Versuch wie bisher fehl.
+  const empty = fakeIo({ html: async () => "<p>leer</p>" });
+  assert.equal(await run("last", empty.io, { now, fetchAttempts: 2, fetchDelayMs: 0 }), false);
+  assert.match(empty.calls.logs.at(-1)!, /^::error::.*Kein Mittagstisch auf der Seite gefunden/);
 });

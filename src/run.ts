@@ -20,11 +20,42 @@ const NOT_SENT = "Heute kein Mittagstisch gesendet.";
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
 /**
+ * Ruft die Seite ab und liest das Menü. Die Seite liefert gelegentlich kurz eine Antwort ohne
+ * Mittagstisch (HTTP 200) oder ist nicht erreichbar, eine Minute später aber wieder richtig –
+ * daher bis zu `attempts` Abrufe. Der letzte Fehler wird weitergereicht.
+ */
+async function fetchMenu(io: Io, today: { year: number; month: number }, attempts: number, delayMs: number): Promise<Menu | null> {
+  for (let attempt = 1; ; attempt++) {
+    let problem: string;
+    try {
+      const lines = htmlToLines(await io.html());
+      const menu = parseMenu(lines, today);
+      if (menu?.dishes.length) return menu;
+      // Anfang der Seite ausgeben, damit sich im Log erkennen lässt, was stattdessen kam.
+      problem = `Kein Mittagstisch gefunden. Seite (${lines.length} Zeilen) beginnt mit: "${lines.slice(0, 3).join(" | ").slice(0, 200)}".`;
+      if (attempt >= attempts) {
+        io.log(problem);
+        return menu;
+      }
+    } catch (err) {
+      if (attempt >= attempts) throw err;
+      problem = `Seite nicht abrufbar: ${message(err)}.`;
+    }
+    io.log(`${problem} Neuer Abruf in ${delayMs / 1000} s (${attempt}/${attempts}).`);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
+
+/**
  * Ein Lauf: höchstens einmal pro Tag senden, Korrekturen nur veröffentlichen.
  * Liefert false, wenn der Lauf fehlschlagen soll – nur beim letzten Versuch des Tages,
  * damit GitHub genau einmal benachrichtigt.
  */
-export async function run(slot: Slot, io: Io, { force = false, now = new Date() } = {}): Promise<boolean> {
+export async function run(
+  slot: Slot,
+  io: Io,
+  { force = false, now = new Date(), fetchAttempts = 1, fetchDelayMs = 60_000 } = {},
+): Promise<boolean> {
   if (slot === "skip") {
     io.log("Außerhalb des Zeitfensters – übersprungen.");
     return true;
@@ -32,7 +63,7 @@ export async function run(slot: Slot, io: Io, { force = false, now = new Date() 
   const last = slot === "last";
   const fail = (reason: string, prefix = NOT_SENT): boolean => {
     if (last) io.log(`::error::${prefix} ${reason}`);
-    else io.log(`${reason} Nächster Versuch in 45 Minuten.`);
+    else io.log(`${reason} Nächster Versuch in 30 Minuten.`);
     return !last;
   };
 
@@ -49,7 +80,7 @@ export async function run(slot: Slot, io: Io, { force = false, now = new Date() 
 
   let menu: Menu | null;
   try {
-    menu = parseMenu(htmlToLines(await io.html()), today);
+    menu = await fetchMenu(io, today, sentToday ? 1 : fetchAttempts, fetchDelayMs);
   } catch (err) {
     if (sentToday) {
       io.log(`Heute bereits gesendet. Seite gerade nicht abrufbar: ${message(err)}`);
