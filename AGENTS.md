@@ -16,8 +16,8 @@ Tests and typecheck must pass before every commit.
 `parse.ts` (HTML → menu) → `check.ts` (validation, send/update/wait decision) → `feed.ts` / `format.ts` (output) →
 `webhooks.ts` (delivery). Types in `types.ts`, Europe/Berlin time in `time.ts`.
 
-Schedule: an external cron service calls `workflow_dispatch` with `scheduled: true` Mon–Fri every
-30 min, 09:00–11:00 Berlin time; GitHub's own `schedule:` is not used because it starts runs hours late.
+Schedule: an external cron service calls `workflow_dispatch` with `scheduled: true` Mon–Fri at
+:29 and :59, 09:29–11:29 Berlin time (cron `29,59 9-11 * * 1-5`, the 11:59 run is skipped); GitHub's own `schedule:` is not used because it starts runs hours late.
 `src/slot.ts` maps the start time to skip/retry/last; it has no imports because the workflow runs it
 with plain Node before `npm ci`. The `update` job gets that result as `SLOT` instead of recomputing it.
 
@@ -32,4 +32,4 @@ with plain Node before `npm ci`. The `update` job gets that result as `SLOT` ins
 - No history: only the current menu exists; `public/` is build output and not committed.
 - At most one message per day. The published `today.json` on GitHub Pages is the only state:
   if its `date` is today, it was sent. Don't add other state (commits, caches) without a reason.
-- Only the last attempt (11:00) or a manual run may fail the workflow, so there's at most one alert email per day.
+- Only the last attempt (11:29) or a manual run may fail the workflow, so there's at most one alert email per day.

@@ -83,19 +83,20 @@ test("Feed und RFC-822-Datum", () => {
   assert.equal(rfc822("2026-01-15T09:00:00+01:00"), "Thu, 15 Jan 2026 09:00:00 +0100");
 });
 
-test("Zeitplan: Zuordnung nach Startzeit, 09:00–11:00 in Sommer- und Winterzeit", () => {
+test("Zeitplan: Zuordnung nach Startzeit, 09:29–11:29 in Sommer- und Winterzeit", () => {
   const at = (iso: string) => slotOf(true, new Date(iso));
-  assert.equal(at("2026-09-28T07:00:05Z"), "retry"); // 09:00 MESZ
-  assert.equal(at("2026-09-28T08:30:05Z"), "retry"); // 10:30 MESZ
-  assert.equal(at("2026-09-28T09:00:05Z"), "last"); // 11:00 MESZ
-  assert.equal(at("2026-01-15T10:00:05Z"), "last"); // 11:00 MEZ
-  assert.equal(at("2026-01-15T08:00:05Z"), "retry"); // 09:00 MEZ
-  // Wenige Minuten zu früh zählt schon zum nächsten Zeitfenster.
-  assert.equal(at("2026-09-28T06:57:00Z"), "retry"); // 08:57
-  assert.equal(at("2026-09-28T08:57:00Z"), "last"); // 10:57
-  // Zu früh oder ab 11:30 (auch der 11:30-Lauf des Cron-Dienstes): kein Senden, kein Fehler.
-  assert.equal(at("2026-09-28T06:50:00Z"), "skip"); // 08:50
-  assert.equal(at("2026-09-28T09:30:00Z"), "skip"); // 11:30
+  assert.equal(at("2026-09-28T07:29:05Z"), "retry"); // 09:29 MESZ
+  assert.equal(at("2026-09-28T08:59:05Z"), "retry"); // 10:59 MESZ
+  assert.equal(at("2026-09-28T09:29:05Z"), "last"); // 11:29 MESZ
+  assert.equal(at("2026-01-15T10:29:05Z"), "last"); // 11:29 MEZ
+  assert.equal(at("2026-01-15T08:29:05Z"), "retry"); // 09:29 MEZ
+  // Wenige Minuten zu früh zählt schon zum nächsten Zeitfenster, etwas verspätet noch zum eigenen.
+  assert.equal(at("2026-09-28T07:25:00Z"), "retry"); // 09:25
+  assert.equal(at("2026-09-28T09:25:00Z"), "last"); // 11:25
+  assert.equal(at("2026-09-28T09:40:00Z"), "last"); // 11:40
+  // Zu früh oder ab 11:45 (auch der 11:59-Lauf des Cron-Dienstes): kein Senden, kein Fehler.
+  assert.equal(at("2026-09-28T07:20:00Z"), "skip"); // 09:20
+  assert.equal(at("2026-09-28T09:59:05Z"), "skip"); // 11:59
   assert.equal(at("2026-09-28T16:03:00Z"), "skip"); // 18:03
   assert.equal(slotOf(false, new Date("2026-09-28T16:03:00Z")), "last"); // manuell oder lokal
 });

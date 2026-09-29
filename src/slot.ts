@@ -2,17 +2,20 @@
  * Zeitfenster der Läufe. Bewusst ohne Imports: Die Action führt die Datei vor `npm ci` direkt mit
  * Node aus (`node src/slot.ts`), um unnötige Läufe früh zu beenden.
  *
- * Ausgelöst wird von einem externen Cron-Dienst (Mo–Fr alle 30 Minuten, 09:00–11:00 Berliner Zeit)
+ * Ausgelöst wird von einem externen Cron-Dienst (Mo–Fr um :29 und :59, 09:29–11:59 Berliner Zeit)
  * per workflow_dispatch mit `scheduled`, weil GitHub eigene geplante Läufe teils Stunden zu spät
  * startet. Die Rolle eines Laufs ergibt sich daher aus seiner Startzeit.
  */
 
 /** Erster Versuch. */
-export const FIRST = "09:00";
-/** Ab hier letzter Versuch: Ohne gesendetes Menü schlägt der Lauf fehl. */
-export const LAST = "11:00";
-/** Ab hier öffnet das Restaurant; spätere Läufe enden ohne Senden und ohne Fehler. */
-export const END = "11:30";
+export const FIRST = "09:29";
+/** Letzter Versuch, kurz bevor das Restaurant um 11:30 öffnet: Ohne gesendetes Menü schlägt der Lauf fehl. */
+export const LAST = "11:29";
+/**
+ * Spätere Läufe enden ohne Senden und ohne Fehler – auch der 11:59-Lauf des Cron-Dienstes, damit es
+ * nur einen letzten Versuch gibt. Der Abstand zu LAST fängt einen verspäteten Start des letzten ab.
+ */
+export const END = "11:45";
 
 /** So viel früher darf ein Lauf starten, ohne dem vorigen Zeitfenster zugeordnet zu werden. */
 const EARLY_MINUTES = 5;

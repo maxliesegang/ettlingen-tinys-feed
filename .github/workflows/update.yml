@@ -1,7 +1,7 @@
 name: Mittagstisch aktualisieren
 
 on:
-  # Geplante Läufe kommen von einem externen Cron-Dienst (Mo–Fr alle 30 Minuten, 09:00–11:00
+  # Geplante Läufe kommen von einem externen Cron-Dienst (Mo–Fr um :29 und :59, 09:29–11:29
   # Berliner Zeit, siehe README) per workflow_dispatch mit "scheduled". GitHubs eigener Zeitplan
   # startet teils Stunden zu spät; src/slot.ts ordnet Läufe nach ihrer Startzeit zu.
   workflow_dispatch:
