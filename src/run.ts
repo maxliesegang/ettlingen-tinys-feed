@@ -28,11 +28,14 @@ async function fetchMenu(io: Io, today: { year: number; month: number }, attempt
   for (let attempt = 1; ; attempt++) {
     let problem: string;
     try {
-      const lines = htmlToLines(await io.html());
+      const html = await io.html();
+      const lines = htmlToLines(html);
       const menu = parseMenu(lines, today);
       if (menu?.dishes.length) return menu;
       // Anfang der Seite ausgeben, damit sich im Log erkennen lässt, was stattdessen kam.
-      problem = `Kein Mittagstisch gefunden. Seite (${lines.length} Zeilen) beginnt mit: "${lines.slice(0, 3).join(" | ").slice(0, 200)}".`;
+      // Ohne sichtbaren Text das rohe HTML zeigen (z. B. eine Seite nur aus Skript oder Weiterleitung).
+      const start = lines.length ? lines.slice(0, 3).join(" | ") : html.replace(/\s+/g, " ").trim();
+      problem = `Kein Mittagstisch gefunden. Seite (${lines.length} Zeilen, ${html.length} Zeichen) beginnt mit: "${start.slice(0, 200)}".`;
       if (attempt >= attempts) {
         io.log(problem);
         return menu;

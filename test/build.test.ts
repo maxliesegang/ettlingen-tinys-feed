@@ -217,6 +217,11 @@ test("Lauf: Seite kurz ohne Mittagstisch oder nicht erreichbar – erneut abrufe
   assert.equal(calls.sent, 1);
   assert.match(calls.logs.join("\n"), /beginnt mit: "Wartung \| Gleich wieder da"/);
 
+  // Seite ohne sichtbaren Text: rohes HTML ins Log, damit erkennbar ist, was kam.
+  const blank = fakeIo({ html: async () => '<html><head><meta http-equiv="refresh" content="0;/x"></head></html>' });
+  assert.equal(await run("retry", blank.io, { now, fetchAttempts: 1, fetchDelayMs: 0 }), true);
+  assert.match(blank.calls.logs.join("\n"), /\(0 Zeilen, \d+ Zeichen\) beginnt mit: "<html><head><meta http-equiv="refresh"/);
+
   // Bleibt die Seite leer, schlägt der letzte Versuch wie bisher fehl.
   const empty = fakeIo({ html: async () => "<p>leer</p>" });
   assert.equal(await run("last", empty.io, { now, fetchAttempts: 2, fetchDelayMs: 0 }), false);

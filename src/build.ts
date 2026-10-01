@@ -20,6 +20,7 @@ import { parseArgs } from "node:util";
 
 import { renderFeed } from "./feed";
 import { SOURCE_URL, menuHash, titleOf } from "./format";
+import { htmlToLines } from "./parse";
 import { run } from "./run";
 import type { Slot } from "./slot";
 import { nowIso } from "./time";
@@ -37,10 +38,30 @@ async function get(url: string): Promise<Response> {
   });
 }
 
+/** Inhalt der Startseite (WordPress-Seite 79) über die REST-API, ohne Theme drumherum. */
+const API_URL = `${SOURCE_URL}wp-json/wp/v2/pages/79?_fields=content`;
+
+/**
+ * Startseite abrufen; ist sie unbrauchbar, den Seiteninhalt über die WordPress-API holen.
+ * GitHub-Runner bekommen von der Startseite zeitweise eine Antwort ohne sichtbaren Text
+ * (vermutlich die Bot-Abfrage des Hosters), von anderen Rechnern aber die richtige Seite.
+ */
 async function fetchHtml(): Promise<string> {
-  const res = await get(SOURCE_URL);
-  if (!res.ok) throw new Error(`Abruf fehlgeschlagen: HTTP ${res.status}`);
-  return res.text();
+  let problem: string;
+  try {
+    const res = await get(SOURCE_URL);
+    const body = await res.text();
+    if (res.status === 200 && htmlToLines(body).length > 0) return body;
+    problem = `HTTP ${res.status}, ${body.length} Zeichen: "${body.replace(/\s+/g, " ").trim().slice(0, 200)}"`;
+  } catch (err) {
+    problem = err instanceof Error ? err.message : String(err);
+  }
+  console.log(`Startseite unbrauchbar (${problem}) – Inhalt über die WordPress-API abrufen.`);
+  const res = await get(API_URL);
+  if (res.status !== 200) throw new Error(`Startseite unbrauchbar (${problem}), WordPress-API: HTTP ${res.status}`);
+  const html = ((await res.json()) as { content?: { rendered?: string } }).content?.rendered;
+  if (!html) throw new Error(`Startseite unbrauchbar (${problem}), WordPress-API ohne Inhalt`);
+  return html;
 }
 
 /** Zuletzt veröffentlichtes Menü; null, wenn noch nie veröffentlicht. Netzwerkfehler brechen ab. */
