@@ -197,6 +197,15 @@ test("Lauf: Status nicht lesbar – nichts senden", async () => {
   assert.match(calls.logs.at(-1)!, /Nicht prüfbar, ob heute schon gesendet wurde: HTTP 503/);
 });
 
+test("Lauf: Log zeigt Ausgangslage, Entscheidung und Warnung bei späterem Versuch", async () => {
+  const { io, calls } = fakeIo({ html: async () => "<p>leer</p>" });
+  assert.equal(await run("retry", io, { now }), true);
+  const log = calls.logs.join("\n");
+  assert.match(log, /^Lauf: retry, heute 2026-09-24, veröffentlicht: nichts\./m);
+  assert.match(log, /^Seite: kein Menü → wait\./m);
+  assert.match(calls.logs.at(-1)!, /^::warning::Noch nicht gesendet\. Kein Mittagstisch.*Nächster Versuch in 30 Minuten\./);
+});
+
 test("Lauf: Korrektur nach dem Senden nur veröffentlichen", async () => {
   const menu = parseMenu(htmlToLines(html), today)!;
   const { io, calls } = fakeIo({ published: async () => published(withPrice(menu, 12)) });

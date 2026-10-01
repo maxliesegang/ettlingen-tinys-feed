@@ -44,8 +44,10 @@ export async function sendWebhooks(menu: Menu, urls: string[], mode: PayloadMode
           body,
           signal: AbortSignal.timeout(20_000),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        console.log(`${label} gesendet.`);
+        // Slack antwortet mit kurzem Text ("ok", "invalid_payload", "no_service") – hilft bei Fehlern.
+        const answer = (await res.text()).replace(/\s+/g, " ").trim().slice(0, 200);
+        if (!res.ok) throw new Error(`HTTP ${res.status}${answer ? `: ${answer}` : ""}`);
+        console.log(`${label} gesendet (HTTP ${res.status}).`);
         return true;
       } catch (err) {
         // Nicht abbrechen, damit der Feed trotzdem aktualisiert wird. URL nicht loggen (Secret!).

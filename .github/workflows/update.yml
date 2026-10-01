@@ -101,9 +101,12 @@ jobs:
       - name: Menü abrufen, Feed bauen, Webhooks senden
         id: build
         run: |
+          set -o pipefail
           rc=0
-          npm run feed -- ${{ inputs.force && '--force' || '' }} || rc=$?
+          npm run feed --silent -- ${{ inputs.force && '--force' || '' }} 2>&1 | tee feed.log || rc=$?
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          # Log auch in der Zusammenfassung des Laufs, ohne die Schritt-Logs zu öffnen.
+          { echo '### Mittagstisch'; echo '```'; sed -E 's/^::(warning|error):://' feed.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           # Ohne neues Menü entsteht kein public/ – dann bleibt die bisherige Seite online.
           echo "built=$([ -f public/today.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:

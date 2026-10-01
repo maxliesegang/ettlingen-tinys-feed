@@ -65,8 +65,9 @@ export async function run(
   }
   const last = slot === "last";
   const fail = (reason: string, prefix = NOT_SENT): boolean => {
+    // Warnung statt Fehler: steht auf der Lauf-Seite, löst aber keine Benachrichtigung aus.
     if (last) io.log(`::error::${prefix} ${reason}`);
-    else io.log(`${reason} Nächster Versuch in 30 Minuten.`);
+    else io.log(`::warning::${prefix === NOT_SENT ? "Noch nicht gesendet." : prefix} ${reason} Nächster Versuch in 30 Minuten.`);
     return !last;
   };
 
@@ -80,6 +81,11 @@ export async function run(
     return fail(message(err), "Nicht prüfbar, ob heute schon gesendet wurde:");
   }
   const sentToday = !force && published?.date === todayIso;
+  io.log(
+    `Lauf: ${slot}${force ? " (--force)" : ""}, heute ${todayIso}, veröffentlicht: ` +
+      (published ? `${published.date} (abgerufen ${published.fetchedAt})` : "nichts") +
+      (sentToday ? " – heute bereits gesendet." : "."),
+  );
 
   let menu: Menu | null;
   try {
@@ -93,6 +99,7 @@ export async function run(
   }
 
   const decision = decide(menu, published, todayIso, { force, last });
+  io.log(`Seite: ${menu ? `${menu.weekday} ${menu.date}, ${menu.dishes.length} Gerichte` : "kein Menü"} → ${decision.action}.`);
   switch (decision.action) {
     case "done":
       io.log(decision.reason);

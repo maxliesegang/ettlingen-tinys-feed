@@ -30,12 +30,24 @@ import { parseMode, parseUrls, sendWebhooks } from "./webhooks";
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "public");
 const SITE_URL = process.env.SITE_URL?.replace(/\/+$/, "") || undefined;
 
-async function get(url: string): Promise<Response> {
-  return fetch(url, {
+/** Antwort-Header, die bei der Fehlersuche helfen (Cache des Hosters, Weiterleitungen). */
+const DEBUG_HEADERS = ["content-type", "x-proxy-cache", "x-proxy-cache-info", "location", "retry-after"];
+
+/** GET mit Log-Zeile: Status, Größe, Dauer und Debug-Header. */
+async function get(label: string, url: string): Promise<{ status: number; body: string }> {
+  const started = Date.now();
+  const res = await fetch(url, {
     headers: { "User-Agent": "tinys-mittagstisch-feed/1.0" },
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });
+  const body = await res.text();
+  const headers = DEBUG_HEADERS.flatMap((h) => (res.headers.has(h) ? [`${h}: ${res.headers.get(h)}`] : []));
+  console.log(
+    `${label}: HTTP ${res.status}, ${body.length} Zeichen, ${Date.now() - started} ms` +
+      (headers.length ? ` (${headers.join("; ")})` : ""),
+  );
+  return { status: res.status, body };
 }
 
 /** Inhalt der Startseite (WordPress-Seite 79) über die REST-API, ohne Theme drumherum. */
@@ -45,21 +57,21 @@ const API_URL = `${SOURCE_URL}wp-json/wp/v2/pages/79?_fields=content`;
  * Startseite abrufen; ist sie unbrauchbar, den Seiteninhalt über die WordPress-API holen.
  * GitHub-Runner bekommen von der Startseite zeitweise eine Antwort ohne sichtbaren Text
  * (vermutlich die Bot-Abfrage des Hosters), von anderen Rechnern aber die richtige Seite.
+ * Der Zeitstempel umgeht den Seiten-Cache des Hosters, damit keine veraltete Kopie kommt.
  */
 async function fetchHtml(): Promise<string> {
   let problem: string;
   try {
-    const res = await get(SOURCE_URL);
-    const body = await res.text();
-    if (res.status === 200 && htmlToLines(body).length > 0) return body;
-    problem = `HTTP ${res.status}, ${body.length} Zeichen: "${body.replace(/\s+/g, " ").trim().slice(0, 200)}"`;
+    const { status, body } = await get("Startseite", `${SOURCE_URL}?t=${Date.now()}`);
+    if (status === 200 && htmlToLines(body).length > 0) return body;
+    problem = `HTTP ${status}, ${body.length} Zeichen: "${body.replace(/\s+/g, " ").trim().slice(0, 200)}"`;
   } catch (err) {
     problem = err instanceof Error ? err.message : String(err);
   }
-  console.log(`Startseite unbrauchbar (${problem}) – Inhalt über die WordPress-API abrufen.`);
-  const res = await get(API_URL);
-  if (res.status !== 200) throw new Error(`Startseite unbrauchbar (${problem}), WordPress-API: HTTP ${res.status}`);
-  const html = ((await res.json()) as { content?: { rendered?: string } }).content?.rendered;
+  console.log(`::warning::Startseite unbrauchbar (${problem}) – Inhalt über die WordPress-API abrufen.`);
+  const { status, body } = await get("WordPress-API", API_URL);
+  if (status !== 200) throw new Error(`Startseite unbrauchbar (${problem}), WordPress-API: HTTP ${status}`);
+  const html = (JSON.parse(body) as { content?: { rendered?: string } }).content?.rendered;
   if (!html) throw new Error(`Startseite unbrauchbar (${problem}), WordPress-API ohne Inhalt`);
   return html;
 }
@@ -68,10 +80,10 @@ async function fetchHtml(): Promise<string> {
 async function fetchPublished(): Promise<PublishedMenu | null> {
   if (!SITE_URL) return null;
   // Zeitstempel umgeht den CDN-Cache von GitHub Pages (max-age 10 Minuten).
-  const res = await get(`${SITE_URL}/today.json?t=${Date.now()}`);
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`Veröffentlichtes today.json nicht lesbar: HTTP ${res.status}`);
-  return (await res.json()) as PublishedMenu;
+  const { status, body } = await get("today.json", `${SITE_URL}/today.json?t=${Date.now()}`);
+  if (status === 404) return null;
+  if (status !== 200) throw new Error(`Veröffentlichtes today.json nicht lesbar: HTTP ${status}`);
+  return JSON.parse(body) as PublishedMenu;
 }
 
 async function writeOutput(menu: Menu): Promise<void> {
