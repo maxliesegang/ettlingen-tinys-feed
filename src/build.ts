@@ -33,11 +33,22 @@ const SITE_URL = process.env.SITE_URL?.replace(/\/+$/, "") || undefined;
 /** Antwort-Header, die bei der Fehlersuche helfen (Cache des Hosters, Weiterleitungen). */
 const DEBUG_HEADERS = ["content-type", "x-proxy-cache", "x-proxy-cache-info", "location", "retry-after"];
 
+/**
+ * Header wie bei einem normalen Browser: Die Bot-Abfrage des Hosters (sgcaptcha) hat
+ * GitHub-Runner mit dem eigenen User-Agent "tinys-mittagstisch-feed/1.0" ausgesperrt.
+ */
+const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+};
+
 /** GET mit Log-Zeile: Status, Größe, Dauer und Debug-Header. */
 async function get(label: string, url: string): Promise<{ status: number; body: string }> {
   const started = Date.now();
   const res = await fetch(url, {
-    headers: { "User-Agent": "tinys-mittagstisch-feed/1.0" },
+    headers: BROWSER_HEADERS,
     cache: "no-store",
     signal: AbortSignal.timeout(20_000),
   });
