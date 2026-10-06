@@ -86,7 +86,9 @@ test("Feed und RFC-822-Datum", () => {
 test("Zeitplan: Zuordnung nach Startzeit, 09:29–11:29 in Sommer- und Winterzeit", () => {
   const at = (iso: string) => slotOf(true, new Date(iso));
   assert.equal(at("2026-09-28T07:29:05Z"), "retry"); // 09:29 MESZ
-  assert.equal(at("2026-09-28T08:59:05Z"), "retry"); // 10:59 MESZ
+  assert.equal(at("2026-09-28T08:29:05Z"), "retry"); // 10:29 MESZ
+  assert.equal(at("2026-09-28T08:59:05Z"), "alert"); // 10:59 MESZ
+  assert.equal(at("2026-01-15T09:59:05Z"), "alert"); // 10:59 MEZ
   assert.equal(at("2026-09-28T09:29:05Z"), "last"); // 11:29 MESZ
   assert.equal(at("2026-01-15T10:29:05Z"), "last"); // 11:29 MEZ
   assert.equal(at("2026-01-15T08:29:05Z"), "retry"); // 09:29 MEZ
@@ -168,6 +170,10 @@ test("Lauf: Webhook fehlgeschlagen – vorher nichts veröffentlichen, zuletzt v
   assert.equal(await run("retry", early.io, { now }), true);
   assert.equal(early.calls.written, 0, "nächster Lauf soll erneut senden");
 
+  const alert = fakeIo({ send: async () => false });
+  assert.equal(await run("alert", alert.io, { now }), false);
+  assert.equal(alert.calls.written, 0, "letzter Versuch soll erneut senden");
+
   const last = fakeIo({ send: async () => false });
   assert.equal(await run("last", last.io, { now }), false);
   assert.equal(last.calls.written, 1);
@@ -182,9 +188,12 @@ test("Lauf: Seite nicht abrufbar, aber heute schon gesendet – kein Alarm", asy
   assert.match(calls.logs.join("\n"), /Heute bereits gesendet/);
 });
 
-test("Lauf: Seite nicht abrufbar und nichts gesendet – erst beim letzten Versuch Alarm", async () => {
+test("Lauf: Seite nicht abrufbar und nichts gesendet – Alarm erst beim vorletzten und letzten Versuch", async () => {
   const down = { html: async () => Promise.reject(new Error("fetch failed")) };
   assert.equal(await run("retry", fakeIo(down).io, { now }), true);
+  const alert = fakeIo(down);
+  assert.equal(await run("alert", alert.io, { now }), false);
+  assert.match(alert.calls.logs.at(-1)!, /^::error::Noch nicht gesendet\. Seite nicht abrufbar.* Letzter Versuch um 11:29\.$/);
   const last = fakeIo(down);
   assert.equal(await run("last", last.io, { now }), false);
   assert.match(last.calls.logs.at(-1)!, /^::error::Heute kein Mittagstisch gesendet\. Seite nicht abrufbar/);

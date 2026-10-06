@@ -96,7 +96,7 @@ jobs:
         id: pages
         uses: actions/configure-pages@v6
 
-      # Schlägt der Lauf fehl (letzter Versuch ohne Versand), wird public/ trotzdem veröffentlicht,
+      # Schlägt der Lauf fehl (vorletzter oder letzter Versuch ohne Versand), wird public/ trotzdem veröffentlicht,
       # falls gebaut; der Fehler wird erst im letzten Schritt gemeldet.
       - name: Menü abrufen, Feed bauen, Webhooks senden
         id: build

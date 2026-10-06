@@ -1,6 +1,6 @@
 import { decide } from "./check";
 import { htmlToLines, parseMenu } from "./parse";
-import type { Slot } from "./slot";
+import { LAST, type Slot } from "./slot";
 import { isoDate, zoned } from "./time";
 import type { Menu, PublishedMenu } from "./types";
 
@@ -51,8 +51,8 @@ async function fetchMenu(io: Io, today: { year: number; month: number }, attempt
 
 /**
  * Ein Lauf: höchstens einmal pro Tag senden, Korrekturen nur veröffentlichen.
- * Liefert false, wenn der Lauf fehlschlagen soll – nur beim letzten Versuch des Tages,
- * damit GitHub genau einmal benachrichtigt.
+ * Liefert false, wenn der Lauf fehlschlagen soll – nur beim vorletzten (alert) und letzten Versuch
+ * des Tages, damit GitHub höchstens zweimal benachrichtigt.
  */
 export async function run(
   slot: Slot,
@@ -64,11 +64,14 @@ export async function run(
     return true;
   }
   const last = slot === "last";
+  const alert = last || slot === "alert";
   const fail = (reason: string, prefix = NOT_SENT): boolean => {
-    // Warnung statt Fehler: steht auf der Lauf-Seite, löst aber keine Benachrichtigung aus.
+    const later = prefix === NOT_SENT ? "Noch nicht gesendet." : prefix;
     if (last) io.log(`::error::${prefix} ${reason}`);
-    else io.log(`::warning::${prefix === NOT_SENT ? "Noch nicht gesendet." : prefix} ${reason} Nächster Versuch in 30 Minuten.`);
-    return !last;
+    else if (alert) io.log(`::error::${later} ${reason} Letzter Versuch um ${LAST}.`);
+    // Warnung statt Fehler: steht auf der Lauf-Seite, löst aber keine Benachrichtigung aus.
+    else io.log(`::warning::${later} ${reason} Nächster Versuch in 30 Minuten.`);
+    return !alert;
   };
 
   const today = zoned(now);

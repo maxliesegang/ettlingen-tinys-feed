@@ -12,9 +12,11 @@ publishes `feed.xml` and `today.json` to GitHub Pages and optionally posts the m
 - At most one message per day: each run first reads the published `today.json`; if it already has
   today's date, nothing is sent. Corrections after that update the feed but are not sent again.
 - If no webhook gets through, nothing is published, so the next attempt sends again.
-- If nothing was sent by the last attempt (11:29, before the restaurant opens at 11:30),
-  that run fails and GitHub emails you (this also happens on holidays). A manual run counts
-  as a last attempt; with "force" it sends again and ignores date and weekday.
+- If nothing was sent by the second-to-last attempt (10:59), that run fails as an early warning,
+  so there's still time to react. If nothing was sent by the last attempt (11:29, before the
+  restaurant opens at 11:30), that run fails too. GitHub emails you each time (this also happens
+  on holidays). A manual run counts as a last attempt; with "force" it sends again and ignores
+  date and weekday.
 - GitHub sometimes starts its own scheduled runs hours late, so an external cron service triggers
   the attempts (see Setup). A run's role follows from its start time; runs before 09:24 or from
   11:45 on are skipped: no message, no alert.
