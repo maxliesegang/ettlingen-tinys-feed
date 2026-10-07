@@ -25,7 +25,8 @@ export const END = "11:45";
 /** So viel früher darf ein Lauf starten, ohne dem vorigen Zeitfenster zugeordnet zu werden. */
 const EARLY_MINUTES = 5;
 
-export type Slot = "skip" | "retry" | "alert" | "last";
+export const SLOTS = ["skip", "retry", "alert", "last"] as const;
+export type Slot = (typeof SLOTS)[number];
 
 const berlinTime = new Intl.DateTimeFormat("de-DE", {
   timeZone: "Europe/Berlin",

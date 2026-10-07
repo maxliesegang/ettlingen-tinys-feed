@@ -22,7 +22,7 @@ import { renderFeed } from "./feed";
 import { SOURCE_URL, menuHash, titleOf } from "./format";
 import { htmlToLines } from "./parse";
 import { run } from "./run";
-import type { Slot } from "./slot";
+import { SLOTS, type Slot } from "./slot";
 import { nowIso } from "./time";
 import type { Menu, PublishedMenu } from "./types";
 import { parseMode, parseUrls, sendWebhooks } from "./webhooks";
@@ -107,8 +107,8 @@ async function writeOutput(menu: Menu): Promise<void> {
 
 function parseSlot(value: string | undefined): Slot {
   if (!value) return "last";
-  if (value === "skip" || value === "retry" || value === "last") return value;
-  throw new Error(`SLOT "${value}" unbekannt, erlaubt: skip, retry, last.`);
+  if ((SLOTS as readonly string[]).includes(value)) return value as Slot;
+  throw new Error(`SLOT "${value}" unbekannt, erlaubt: ${SLOTS.join(", ")}.`);
 }
 
 async function main(): Promise<void> {
